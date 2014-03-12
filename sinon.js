@@ -1,5 +1,5 @@
 /**
- * Sinon.JS 1.8.3, 2014/03/04
+ * Sinon.JS 1.9.0, 2014/03/05
  *
  * @author Christian Johansen (christian@cjohansen.no)
  * @author Contributors: https://github.com/cjohansen/Sinon.JS/blob/master/AUTHORS
@@ -3357,6 +3357,25 @@ if (typeof sinon == "undefined") {
         }
     };
 
+    sinon.ProgressEvent = function ProgressEvent(type, progressEventRaw, target) {
+        this.initEvent(type, false, false, target);
+        this.loaded = progressEventRaw.loaded || null;
+        this.total = progressEventRaw.total || null;
+    };
+
+    sinon.ProgressEvent.prototype = new sinon.Event();
+
+    sinon.ProgressEvent.prototype.constructor =  sinon.ProgressEvent;
+
+    sinon.CustomEvent = function CustomEvent(type, customData, target) {
+        this.initEvent(type, false, false, target);
+        this.detail = customData.detail || null;
+    };
+
+    sinon.CustomEvent.prototype = new sinon.Event();
+
+    sinon.CustomEvent.prototype.constructor =  sinon.CustomEvent;
+
     sinon.EventTarget = {
         addEventListener: function addEventListener(event, listener) {
             this.eventListeners = this.eventListeners || {};
@@ -3467,7 +3486,7 @@ if (typeof sinon == "undefined") {
                 var listener = xhr["on" + eventName];
 
                 if (listener && typeof listener == "function") {
-                    listener(event);
+                    listener.call(this, event);
                 }
             });
         }
@@ -3606,6 +3625,12 @@ if (typeof sinon == "undefined") {
     };
     FakeXMLHttpRequest.useFilters = false;
 
+    function verifyRequestOpened(xhr) {
+        if (xhr.readyState != FakeXMLHttpRequest.OPENED) {
+            throw new Error("INVALID_STATE_ERR - " + xhr.readyState);
+        }
+    }
+
     function verifyRequestSent(xhr) {
         if (xhr.readyState == FakeXMLHttpRequest.DONE) {
             throw new Error("Request done");
@@ -3671,7 +3696,7 @@ if (typeof sinon == "undefined") {
                     this.dispatchEvent(new sinon.Event("loadend", false, false, this));
                     this.upload.dispatchEvent(new sinon.Event("load", false, false, this));
                     if (supportsProgress) {
-                        this.upload.dispatchEvent(new sinon.Event("progress", {loaded: 100, total: 100}));
+                        this.upload.dispatchEvent(new sinon.ProgressEvent('progress', {loaded: 100, total: 100}));
                     }
                     break;
             }
@@ -3693,6 +3718,7 @@ if (typeof sinon == "undefined") {
 
         // Helps testing
         setResponseHeaders: function setResponseHeaders(headers) {
+            verifyRequestOpened(this);
             this.responseHeaders = {};
 
             for (var header in headers) {
@@ -3838,13 +3864,13 @@ if (typeof sinon == "undefined") {
 
         uploadProgress: function uploadProgress(progressEventRaw) {
             if (supportsProgress) {
-                this.upload.dispatchEvent(new sinon.Event("progress", progressEventRaw));
+                this.upload.dispatchEvent(new sinon.ProgressEvent("progress", progressEventRaw));
             }
         },
 
         uploadError: function uploadError(error) {
             if (supportsCustomEvent) {
-                this.upload.dispatchEvent(new sinon.Event("error", {"detail": error}));
+                this.upload.dispatchEvent(new sinon.CustomEvent("error", {"detail": error}));
             }
         }
     });
@@ -4720,6 +4746,20 @@ if (typeof module !== 'undefined' && module.exports) {
             }
 
             return target;
+        },
+
+        match: function match(actual, expectation) {
+            var matcher = sinon.match(expectation);
+            if (matcher.test(actual)) {
+                assert.pass("match");
+            } else {
+                var formatted = [
+                    "expected value to match",
+                    "    expected = " + sinon.format(expectation),
+                    "    actual = " + sinon.format(actual)
+                ]
+                failAssertion(this, formatted.join("\n"));
+            }
         }
     };
 
